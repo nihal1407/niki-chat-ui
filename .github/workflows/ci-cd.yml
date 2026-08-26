@@ -1,0 +1,88 @@
+name: CI/CD — Build & Deploy Niki Chat UI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  build:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build & Push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Output image digest
+        run: echo "IMAGE_DIGEST=${{ steps.meta.outputs.digest }}" >> $GITHUB_OUTPUT
+
+  deploy:
+    name: Deploy to VM2
+    needs: build
+    runs-on: self-hosted
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Pull latest image
+        run: docker pull ghcr.io/${{ github.repository }}:latest
+
+      - name: Deploy with compose
+        run: |
+          cd ~/actions-runner  # runner working dir
+          # Ensure docker-compose.yml exists in a fixed location
+          mkdir -p /opt/niki-chat-ui
+          cp docker-compose.yml /opt/niki-chat-ui/
+          # Ensure .env exists (template provided, user creates actual)
+          if [ ! -f /opt/niki-chat-ui/.env ]; then
+            cp .env.example /opt/niki-chat-ui/.env
+            echo "⚠️ /opt/niki-chat-ui/.env created from template — edit with real values"
+          fi
+          cd /opt/niki-chat-ui
+          docker compose pull
+          docker compose up -d --remove-orphans
+
+      - name: Verify container health
+        run: |
+          sleep 3
+          docker ps --filter "name=niki-chat-ui" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+          curl -sf http://localhost:3000/api/check || echo "⚠️ Health check failed"

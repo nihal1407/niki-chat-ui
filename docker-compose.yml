@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  niki-chat-ui:
+    image: ghcr.io/nihal1407/niki-chat-ui:${IMAGE_TAG:-latest}
+    container_name: niki-chat-ui
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
