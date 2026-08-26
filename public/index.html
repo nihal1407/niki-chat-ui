@@ -1,33 +1,55 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Niki Chat</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>J.A.R.V.I.S. — Just A Rather Very Intelligent System</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Rajdhani:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div id="login-view" class="login-wrap hidden">
-    <div class="login-card">
-      <h1>💬 Niki</h1>
-      <p class="sub">Private chat interface</p>
-      <input type="password" id="pwd" placeholder="Password" autocomplete="current-password">
-      <button id="login-btn">Enter</button>
-      <div id="login-err" class="err"></div>
+<!-- boot sequence -->
+<div id="boot" class="boot-screen">
+  <div class="boot-ring"></div>
+  <div class="boot-text" id="boot-text">INITIALIZING J.A.R.V.I.S.</div>
+  <div class="boot-sub" id="boot-sub">loading neural core…</div>
+</div>
+
+<!-- login -->
+<div id="login-view" class="login-wrap hidden">
+  <div class="arcana-card">
+    <div class="ring-outer"><div class="ring-inner"></div></div>
+    <h1 class="jarvis-title">J.A.R.V.I.S.</h1>
+    <p class="sub">JUST A RATHER VERY INTELLIGENT SYSTEM</p>
+    <input type="password" id="pwd" placeholder="VOICE AUTHORIZATION CODE" autocomplete="off">
+    <button id="login-btn">AUTHENTICATE</button>
+    <div id="login-err" class="err"></div>
+  </div>
+</div>
+
+<!-- chat -->
+<div id="chat-view" class="chat-wrap hidden">
+  <header>
+    <div class="hud-left">
+      <span class="reactor"></span>
+      <span class="title">J.A.R.V.I.S.</span>
+      <span class="status" id="conn-status">● ONLINE</span>
     </div>
-  </div>
+    <div class="hud-right">
+      <span class="hud-stat" id="clock"></span>
+      <span class="hud-stat" id="mem">MEM 0%</span>
+    </div>
+  </header>
 
-  <div id="chat-view" class="chat-wrap hidden">
-    <header>
-      <span class="dot"></span> Niki <span class="tag">hermes agent</span>
-    </header>
-    <main id="messages"></main>
-    <footer>
-      <textarea id="input" rows="1" placeholder="Message Niki…"></textarea>
-      <button id="send">➤</button>
-    </footer>
-  </div>
+  <main id="messages"></main>
 
-  <script src="app.js"></script>
+  <footer>
+    <div class="power-indicator" id="power"></div>
+    <textarea id="input" rows="1" placeholder="Speak to J.A.R.V.I.S. …"></textarea>
+    <button id="send" title="Transmit"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></button>
+  </footer>
+</div>
+
+<script src="app.js"></script>
 </body>
 </html>

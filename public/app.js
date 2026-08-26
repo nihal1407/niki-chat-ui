@@ -1,9 +1,59 @@
-/* Niki Chat UI client */
+/* ═══ J.A.R.V.I.S. client ═══ */
 
 const $ = (id) => document.getElementById(id);
 let ws = null;
 
+// ---------- boot sequence ----------
+const BOOT_LINES = [
+  ['INITIALIZING J.A.R.V.I.S.', 'loading neural core…'],
+  ['CALIBRATING SENSORS', 'establishing secure uplink…'],
+  ['SYSTEMS NOMINAL', 'all diagnostics passed'],
+];
+(async () => {
+  for (const [main, sub] of BOOT_LINES) {
+    $('boot-text').textContent = main;
+    $('boot-sub').textContent = sub;
+    await new Promise(r => setTimeout(r, 550));
+  }
+  $('boot').style.opacity = '0';
+  setTimeout(() => {
+    $('boot').classList.add('hidden');
+    // check existing session
+    const r = fetch('/api/check').then(res => {
+      if (res.ok) {
+        $('login-view').classList.add('hidden');
+        $('chat-view').classList.remove('hidden');
+        connectWS();
+        jarvisGreeting();
+      } else {
+        $('login-view').classList.remove('hidden');
+        setTimeout(() => $('pwd') && $('pwd').focus(), 100);
+      }
+    });
+  }, 600);
+})();
+
 // ---------- auth ----------
+$('login-btn').onclick = doLogin;
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.activeElement === $('pwd')) doLogin();
+});
+
+async function doLogin() {
+  const pwd = $('pwd').value;
+  if (!pwd) return;
+  $('login-btn').textContent = 'SCANNING…';
+  const ok = await tryLogin(pwd);
+  $('login-btn').textContent = 'AUTHENTICATE';
+  if (ok) {
+    $('login-view').classList.add('hidden');
+    $('chat-view').classList.remove('hidden');
+    connectWS();
+    jarvisGreeting();
+  } else {
+    $('login-err').textContent = '⚠ ACCESS DENIED — INVALID CODE';
+  }
+}
 async function tryLogin(pwd) {
   const r = await fetch('/api/login', {
     method: 'POST',
@@ -13,68 +63,57 @@ async function tryLogin(pwd) {
   return r.ok;
 }
 
-$('login-btn').onclick = doLogin;
-$('pwd').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+// ---------- HUD clock ----------
+setInterval(() => {
+  if ($('clock')) $('clock').textContent = new Date().toLocaleTimeString('en-GB');
+}, 1000);
 
-async function doLogin() {
-  const pwd = $('pwd').value;
-  if (!pwd) return;
-  $('login-btn').textContent = '…';
-  const ok = await tryLogin(pwd);
-  $('login-btn').textContent = 'Enter';
-  if (ok) {
-    $('login-view').classList.add('hidden');
-    $('chat-view').classList.remove('hidden');
-    connectWS();
-    addMsg('niki', "Hi nehal! 👋 Niki here — browser edition. What can I do for you?");
-  } else {
-    $('login-err').textContent = 'Wrong password, try again.';
-  }
-}
-
-// ---------- websocket to backend (proxied) ----------
+// ---------- websocket ----------
 function connectWS() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/proxy-ws`);
 
-  ws.onopen = () => console.log('connected');
+  ws.onopen = () => {
+    $('conn-status').textContent = '● ONLINE';
+    $('conn-status').style.color = '#3ddc84';
+  };
   ws.onmessage = (ev) => {
     let data;
     try { data = JSON.parse(ev.data); } catch { return; }
-
-    // Hermes backend messages vary by version; handle common shapes.
-    // Assistant text chunks / final events:
     if (data.type === 'backend_connected') return;
-    if (data.type === 'error') { addMsg('niki', `⚠️ ${data.message || 'backend error'}`); return; }
+    if (data.type === 'error') { addMsg('niki', `⚠ SYSTEM FAULT — ${data.message || 'backend error'}`); endTyping(); return; }
     if (data.method === 'event' && data.params) {
       const p = data.params;
-      // assistant message deltas
       if (p.type === 'assistant_message_delta' && p.text) streamMsg(p.text);
       else if (p.type === 'assistant_message' && p.text) finalizeMsg(p.text);
-      else if (p.type === 'turn_completed' || p.type === 'response_done') endTyping();
+      else if (['turn_completed', 'response_done'].includes(p.type)) endTyping();
     }
-    // direct RPC responses
-    if (data.result && data.result.content) {
-      finalizeMsg(data.result.content);
-    }
+    if (data.result && data.result.content) finalizeMsg(data.result.content);
   };
-  ws.onclose = () => setTimeout(connectWS, 2000);
+  ws.onclose = () => {
+    $('conn-status').textContent = '● RECONNECTING…';
+    $('conn-status').style.color = 'var(--gold)';
+    setTimeout(connectWS, 2000);
+  };
 }
 
-// ---------- sending ----------
+// ---------- send ----------
 $('send').onclick = send;
 $('input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+$('input').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 130) + 'px';
 });
 
 function send() {
   const txt = $('input').value.trim();
   if (!txt || !ws || ws.readyState !== WebSocket.OPEN) return;
-  addMsg('user', txt);
+  addMsg('user', txt.toUpperCase());
   $('input').value = '';
+  $('input').style.height = 'auto';
   showTyping();
-
-  // Hermes JSON-RPC chat request shape (adjust method/params per your backend version)
   ws.send(JSON.stringify({
     jsonrpc: '2.0',
     id: Date.now(),
@@ -83,9 +122,14 @@ function send() {
   }));
 }
 
-// ---------- rendering ----------
-let typingEl = null;
-let streamingEl = null;
+// ---------- render ----------
+let typingEl = null, streamingEl = null, streamBuf = '';
+
+function jarvisGreeting() {
+  const h = new Date().getHours();
+  const greet = h < 12 ? 'Good morning, sir' : h < 17 ? 'Good afternoon, sir' : 'Good evening, sir';
+  addMsg('niki', `${greet}. All systems are operational. How may I assist you?`);
+}
 
 function addMsg(role, text) {
   const div = document.createElement('div');
@@ -95,23 +139,18 @@ function addMsg(role, text) {
   scrollBottom();
   return div;
 }
-
 function showTyping() {
   typingEl = document.createElement('div');
   typingEl.className = 'msg niki typing';
-  typingEl.textContent = 'Niki is thinking…';
+  typingEl.textContent = '// processing request …';
   $('messages').appendChild(typingEl);
   scrollBottom();
 }
 function endTyping() { if (typingEl) { typingEl.remove(); typingEl = null; } }
 
-let streamBuf = '';
 function streamMsg(chunk) {
   endTyping();
-  if (!streamingEl) {
-    streamBuf = '';
-    streamingEl = addMsg('niki', '');
-  }
+  if (!streamingEl) { streamBuf = ''; streamingEl = addMsg('niki', ''); }
   streamBuf += chunk;
   streamingEl.textContent = streamBuf;
   scrollBottom();
@@ -119,10 +158,9 @@ function streamMsg(chunk) {
 function finalizeMsg(text) {
   endTyping();
   if (streamingEl && !text) { streamingEl = null; return; }
-  if (streamingEl) { streamingEl = null; }
+  streamingEl = null;
   if (text) addMsg('niki', text);
 }
-
 function scrollBottom() {
   const m = $('messages');
   m.scrollTop = m.scrollHeight;
